@@ -6,7 +6,9 @@ import uvicorn
 import logging
 import sys
 import os
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 # Add the shared directory to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
-    logger.info("Starting User Service...")
+    logger.info("Starting Ride Service...")
     try:
         # Create database tables
         create_tables()
@@ -37,12 +39,12 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    logger.info("Shutting down User Service...")
+    logger.info("Shutting down Ride Service...")
 
 # Create FastAPI application
 app = FastAPI(
-    title="RickshawX User Service",
-    description="User management and authentication service for RickshawX platform",
+    title="RickshawX Ride Service",
+    description="Ride management and tracking service for RickshawX platform",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -104,7 +106,7 @@ app.include_router(router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {
-        "service": "RickshawX User Service",
+        "service": "RickshawX Ride Service",
         "version": "1.0.0",
         "status": "running"
     }
@@ -114,19 +116,16 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "service": "user-service",
+        "service": "ride-service",
         "timestamp": datetime.utcnow().isoformat()
     }
 
 if __name__ == "__main__":
-    import time
-    from datetime import datetime
-    
     # Run the application
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         access_log=True
-    )
+    ) 

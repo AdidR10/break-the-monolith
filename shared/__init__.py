@@ -1,0 +1,1 @@
+# Shared configurations for RickshawX microservices 

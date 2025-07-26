@@ -1,32 +1,214 @@
 version: "3.8"
 
 services:
-  db:
-    image: postgres:15
-    container_name: user_service_db
+  # Database Services
+  postgres:
+    image: postgres:15-alpine
+    container_name: rickshawx_postgres
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: rideshare_db
+      POSTGRES_DB: rickshawx_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rickshawx_network
 
-  user-service:
-    build: ./services/user-service
-    container_name: user_service_api
-    depends_on:
-      - db
+  # Message Broker
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    container_name: rickshawx_rabbitmq
+    restart: always
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/rideshare_db
-      SECRET_KEY: BreakingTheMonolithWithIEEECSCUET
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "8000:8000"
+      - "5672:5672"
+      - "15672:15672"  # Management UI
     volumes:
-      - ./services/user-service:/app
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - rickshawx_network
+
+  # Cache
+  redis:
+    image: redis:7-alpine
+    container_name: rickshawx_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rickshawx_network
+
+  # Microservices
+  user-service:
+    build: ./services/user-services
+    container_name: rickshawx_user_service
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rickshawx_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      SECRET_KEY: BreakingTheMonolithWithIEEECSCUET
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./services/user-services:/app
+      - ./shared:/app/shared
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - rickshawx_network
+
+  ride-service:
+    build: ./services/ride_service
+    container_name: rickshawx_ride_service
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - user-service
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rickshawx_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      USER_SERVICE_URL: http://user-service:8000
+    ports:
+      - "8081:8001"
+    volumes:
+      - ./services/ride_service:/app
+      - ./shared:/app/shared
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    networks:
+      - rickshawx_network
+
+  location-service:
+    build: ./services/location_service
+    container_name: rickshawx_location_service
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rickshawx_db
+    ports:
+      - "8082:8002"
+    volumes:
+      - ./services/location_service:/app
+      - ./shared:/app/shared
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+    networks:
+      - rickshawx_network
+
+  payment-service:
+    build: ./services/payment_service
+    container_name: rickshawx_payment_service
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rickshawx_db
+    ports:
+      - "8083:8003"
+    volumes:
+      - ./services/payment_service:/app
+      - ./shared:/app/shared
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+    networks:
+      - rickshawx_network
+
+  notification-service:
+    build: ./services/notification_service
+    container_name: rickshawx_notification_service
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
+    ports:
+      - "8084:8004"
+    volumes:
+      - ./services/notification_service:/app
+      - ./shared:/app/shared
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8004", "--reload"]
+    networks:
+      - rickshawx_network
+
+  # API Gateway (Nginx reverse proxy)
+  api-gateway:
+    image: nginx:alpine
+    container_name: rickshawx_api_gateway
+    depends_on:
+      - user-service
+      - ride-service
+      - location-service
+      - payment-service
+      - notification-service
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - rickshawx_network
+
+  # Monitoring and Observability
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rickshawx_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - rickshawx_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rickshawx_grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - rickshawx_network
 
 volumes:
   postgres_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  rickshawx_network:
+    driver: bridge
