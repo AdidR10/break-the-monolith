@@ -15,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   user-service:
-    build: ./services/user-service
+    build: ./services/user-services
     container_name: user_service_api
     depends_on:
       - db
@@ -25,7 +25,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./services/user-service:/app
+      - ./services/user-services:/app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   nginx:
