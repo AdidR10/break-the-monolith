@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  payment_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rickshawx_payment_service
+    ports:
+      - "8083:8083"
+    environment:
+      - DATABASE_URL=postgresql://rickshawx_user:password123@host.docker.internal:5432/rickshawx_payment_db
+      - REDIS_URL=redis://host.docker.internal:6379/3
+      - RABBITMQ_URL=amqp://rickshawx_user:password123@host.docker.internal:5672/
+      - USER_SERVICE_URL=http://host.docker.internal:8080
+      - RIDE_SERVICE_URL=http://host.docker.internal:8081
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+      - STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+      - BKASH_APP_KEY=your_bkash_app_key
+      - BKASH_APP_SECRET=your_bkash_app_secret
+      - NAGAD_MERCHANT_ID=your_nagad_merchant_id
+      - NAGAD_MERCHANT_SECRET=your_nagad_merchant_secret
+      - PAYMENT_TIMEOUT_MINUTES=10
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - rickshawx_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  rickshawx_network:
+    driver: bridge 

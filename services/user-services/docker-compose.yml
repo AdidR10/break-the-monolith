@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  user_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rickshawx_user_service
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://rickshawx_user:password123@host.docker.internal:5432/rickshawx_user_db
+      - REDIS_URL=redis://host.docker.internal:6379/0
+      - RABBITMQ_URL=amqp://rickshawx_user:password123@host.docker.internal:5672/
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - rickshawx_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  rickshawx_network:
+    driver: bridge 

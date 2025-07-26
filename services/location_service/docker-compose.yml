@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  location_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rickshawx_location_service
+    ports:
+      - "8082:8082"
+    environment:
+      - DATABASE_URL=postgresql://rickshawx_user:password123@host.docker.internal:5432/rickshawx_location_db
+      - REDIS_URL=redis://host.docker.internal:6379/2
+      - RABBITMQ_URL=amqp://rickshawx_user:password123@host.docker.internal:5672/
+      - USER_SERVICE_URL=http://host.docker.internal:8080
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - LOCATION_UPDATE_INTERVAL_SECONDS=30
+      - GEOFENCE_RADIUS_METERS=100
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - rickshawx_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  rickshawx_network:
+    driver: bridge 
