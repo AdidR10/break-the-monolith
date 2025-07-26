@@ -32,8 +32,13 @@ async def lifespan(app: FastAPI):
         # Create database tables
         create_tables()
         logger.info("Database tables created successfully")
+        
+        # Initialize Redis connection
+        from shared.redis_config import redis_client
+        redis_client.connect()
+        logger.info("Redis connection initialized successfully")
     except Exception as e:
-        logger.error(f"Failed to create database tables: {e}")
+        logger.error(f"Failed to initialize services: {e}")
     
     yield
     
@@ -113,6 +118,7 @@ async def root():
 # Health check endpoint
 @app.get("/health")
 async def health_check():
+    from datetime import datetime
     return {
         "status": "healthy",
         "service": "user-service",
@@ -120,7 +126,6 @@ async def health_check():
     }
 
 if __name__ == "__main__":
-    import time
     from datetime import datetime
     
     # Run the application

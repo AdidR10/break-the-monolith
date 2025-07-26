@@ -4,8 +4,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, relationship
 from datetime import datetime
 import uuid
+from uuid import UUID as PythonUUID
 import enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from decimal import Decimal
 import sys
@@ -54,33 +55,31 @@ class Transaction(Base):
 
 # Schemas
 class WalletResponse(BaseModel):
-    id: UUID
-    user_id: UUID
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: PythonUUID
+    user_id: PythonUUID
     balance: Decimal
     currency: str
     is_active: bool
-    
-    class Config:
-        from_attributes = True
 
 class TransactionCreate(BaseModel):
-    ride_id: Optional[UUID] = None
-    to_user_id: UUID
+    ride_id: Optional[PythonUUID] = None
+    to_user_id: PythonUUID
     amount: Decimal = Field(..., gt=0)
     transaction_type: TransactionType
     description: Optional[str] = None
 
 class TransactionResponse(BaseModel):
-    id: UUID
-    ride_id: Optional[UUID]
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: PythonUUID
+    ride_id: Optional[PythonUUID]
     amount: Decimal
     transaction_type: TransactionType
     status: TransactionStatus
     description: Optional[str]
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 app = FastAPI(title="RickshawX Payment Service", version="1.0.0")
 
@@ -89,11 +88,11 @@ async def startup():
     create_tables()
 
 # Mock user validation (replace with actual user service call)
-async def get_current_user_id() -> UUID:
-    return UUID("12345678-1234-5678-9012-123456789012")
+async def get_current_user_id() -> PythonUUID:
+    return PythonUUID("12345678-1234-5678-9012-123456789012")
 
 @app.post("/api/v1/wallets", response_model=WalletResponse)
-async def create_wallet(user_id: UUID, db: Session = Depends(get_db)):
+async def create_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
     """Create wallet for user"""
     existing = db.query(Wallet).filter(Wallet.user_id == user_id).first()
     if existing:
@@ -106,7 +105,7 @@ async def create_wallet(user_id: UUID, db: Session = Depends(get_db)):
     return wallet
 
 @app.get("/api/v1/wallets/{user_id}", response_model=WalletResponse)
-async def get_wallet(user_id: UUID, db: Session = Depends(get_db)):
+async def get_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
     """Get wallet by user ID"""
     wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
     if not wallet:
@@ -116,7 +115,7 @@ async def get_wallet(user_id: UUID, db: Session = Depends(get_db)):
 @app.post("/api/v1/transactions", response_model=TransactionResponse)
 async def create_transaction(
     transaction: TransactionCreate, 
-    from_user_id: UUID = Depends(get_current_user_id),
+    from_user_id: PythonUUID = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """Create transaction between wallets"""
