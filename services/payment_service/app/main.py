@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, String, ForeignKey, DECIMAL, DateTime, Boolean, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session, relationship
@@ -7,7 +8,7 @@ import uuid
 from uuid import UUID as PythonUUID
 import enum
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from decimal import Decimal
 import sys
 import os
@@ -83,6 +84,15 @@ class TransactionResponse(BaseModel):
 
 app = FastAPI(title="RickshawX Payment Service", version="1.0.0")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 async def startup():
     create_tables()
@@ -91,12 +101,34 @@ async def startup():
 async def get_current_user_id() -> PythonUUID:
     return PythonUUID("12345678-1234-5678-9012-123456789012")
 
+@app.get("/api/v1/wallets/{user_id}", response_model=WalletResponse)
+async def get_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
+    """Get wallet by user ID - create if not exists"""
+    wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
+    if not wallet:
+        # Auto-create wallet if it doesn't exist
+        wallet = Wallet(user_id=user_id)
+        db.add(wallet)
+        db.commit()
+        db.refresh(wallet)
+    return wallet
+
 @app.post("/api/v1/wallets", response_model=WalletResponse)
-async def create_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
-    """Create wallet for user"""
+async def create_wallet_for_user(
+    user_data: dict = None,
+    db: Session = Depends(get_db)
+):
+    """Create wallet for user - expects user_id in request body or uses auth header"""
+    # Try to get user_id from request body
+    if user_data and "user_id" in user_data:
+        user_id = PythonUUID(user_data["user_id"])
+    else:
+        # Use mock ID for now - in production, extract from JWT token
+        user_id = PythonUUID("12345678-1234-5678-9012-123456789012")
+    
     existing = db.query(Wallet).filter(Wallet.user_id == user_id).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Wallet already exists")
+        return existing  # Return existing wallet instead of error
     
     wallet = Wallet(user_id=user_id)
     db.add(wallet)
@@ -104,12 +136,37 @@ async def create_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
     db.refresh(wallet)
     return wallet
 
-@app.get("/api/v1/wallets/{user_id}", response_model=WalletResponse)
-async def get_wallet(user_id: PythonUUID, db: Session = Depends(get_db)):
-    """Get wallet by user ID"""
+@app.post("/api/v1/wallets/{user_id}/topup", response_model=WalletResponse)
+async def top_up_wallet(
+    user_id: PythonUUID, 
+    amount: Decimal, 
+    db: Session = Depends(get_db)
+):
+    """Top up wallet balance"""
     wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
+    
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    
+    wallet.balance += amount
+    wallet.updated_at = datetime.utcnow()
+    
+    # Create transaction record
+    transaction = Transaction(
+        from_wallet_id=wallet.id,
+        to_wallet_id=wallet.id,
+        amount=amount,
+        transaction_type=TransactionType.WALLET_TOPUP,
+        status=TransactionStatus.COMPLETED,
+        description="Wallet top-up",
+        completed_at=datetime.utcnow()
+    )
+    
+    db.add(transaction)
+    db.commit()
+    db.refresh(wallet)
     return wallet
 
 @app.post("/api/v1/transactions", response_model=TransactionResponse)
@@ -119,7 +176,32 @@ async def create_transaction(
     db: Session = Depends(get_db)
 ):
     """Create transaction between wallets"""
-    # Get wallets
+    # For wallet top-up, just update the user's wallet
+    if transaction.transaction_type == TransactionType.WALLET_TOPUP:
+        wallet = db.query(Wallet).filter(Wallet.user_id == transaction.to_user_id).first()
+        if not wallet:
+            raise HTTPException(status_code=404, detail="Wallet not found")
+        
+        wallet.balance += transaction.amount
+        wallet.updated_at = datetime.utcnow()
+        
+        # Create transaction record
+        db_transaction = Transaction(
+            from_wallet_id=wallet.id,
+            to_wallet_id=wallet.id,
+            amount=transaction.amount,
+            transaction_type=transaction.transaction_type,
+            description=transaction.description,
+            status=TransactionStatus.COMPLETED,
+            completed_at=datetime.utcnow()
+        )
+        
+        db.add(db_transaction)
+        db.commit()
+        db.refresh(db_transaction)
+        return db_transaction
+    
+    # Get wallets for other transaction types
     from_wallet = db.query(Wallet).filter(Wallet.user_id == from_user_id).first()
     to_wallet = db.query(Wallet).filter(Wallet.user_id == transaction.to_user_id).first()
     
@@ -152,6 +234,20 @@ async def create_transaction(
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
+
+@app.get("/api/v1/transactions/user/{user_id}", response_model=List[TransactionResponse])
+async def get_user_transactions(user_id: PythonUUID, db: Session = Depends(get_db)):
+    """Get transaction history for a user"""
+    wallet = db.query(Wallet).filter(Wallet.user_id == user_id).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    
+    transactions = db.query(Transaction).filter(
+        (Transaction.from_wallet_id == wallet.id) | 
+        (Transaction.to_wallet_id == wallet.id)
+    ).order_by(Transaction.created_at.desc()).all()
+    
+    return transactions
 
 @app.get("/health")
 async def health_check():
