@@ -5,11 +5,24 @@ from typing import Optional, List, Dict, Any
 from uuid import UUID
 import bcrypt
 import logging
+import sys
+import os
 from datetime import datetime, timedelta
+
+# Add the shared directory to Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 
 from . import models, schemas
 
 logger = logging.getLogger(__name__)
+
+# Import auth module for cache invalidation
+try:
+    from . import auth
+    CACHE_AVAILABLE = True
+except ImportError:
+    CACHE_AVAILABLE = False
+    logger.warning("Auth module not available for cache invalidation")
 
 class UserCRUD:
     @staticmethod
@@ -119,6 +132,11 @@ class UserCRUD:
             user.updated_at = datetime.utcnow()
             db.commit()
             db.refresh(user)
+            
+            # Invalidate Redis cache for updated user
+            if CACHE_AVAILABLE:
+                auth.invalidate_user_cache(str(user_id))
+            
             logger.info(f"User updated successfully: {user.email}")
             return user
             
@@ -131,6 +149,30 @@ class UserCRUD:
             raise
 
     @staticmethod
+    def update_last_login(db: Session, user_id: UUID) -> bool:
+        """Update user's last login time"""
+        try:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+            if user:
+                user.last_login = datetime.utcnow()
+                db.commit()
+                
+                # Update cache with new last_login time
+                if CACHE_AVAILABLE:
+                    # Get fresh user data and update cache
+                    fresh_user = UserCRUD.get_user_by_id(db, user_id)
+                    if fresh_user:
+                        user_data = auth.serialize_user_for_cache(fresh_user)
+                        auth.cache_user_data(str(user_id), user_data)
+                
+                return True
+            return False
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error updating last login for user {user_id}: {e}")
+            return False
+
+    @staticmethod
     def deactivate_user(db: Session, user_id: UUID) -> bool:
         """Deactivate user account"""
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -138,6 +180,11 @@ class UserCRUD:
             user.is_active = False
             user.updated_at = datetime.utcnow()
             db.commit()
+            
+            # Invalidate cache and blacklist all user tokens
+            if CACHE_AVAILABLE:
+                auth.TokenBlacklist.blacklist_user_tokens(str(user_id))
+                auth.invalidate_user_cache(str(user_id))
             return True
         return False
 
