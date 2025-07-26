@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
 import sys
 import os
@@ -23,6 +23,8 @@ class LocationCreate(BaseModel):
     is_drop_point: bool = True
 
 class LocationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: UUID
     location_name: str
     zone: str
@@ -33,9 +35,6 @@ class LocationResponse(BaseModel):
     is_drop_point: bool
     is_active: bool
     popularity_score: int
-    
-    class Config:
-        from_attributes = True
 
 app = FastAPI(title="RickshawX Location Service", version="1.0.0")
 
@@ -62,10 +61,53 @@ async def get_locations(
     
     return query.order_by(models.CampusLocation.popularity_score.desc()).all()
 
+@app.get("/api/v1/locations/{location_id}", response_model=LocationResponse)
+async def get_location_by_id(location_id: UUID, db: Session = Depends(get_db)):
+    """Get a specific location by its ID"""
+    location = db.query(models.CampusLocation).filter(
+        models.CampusLocation.id == location_id,
+        models.CampusLocation.is_active == True
+    ).first()
+    
+    if not location:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Location with ID {location_id} not found or inactive"
+        )
+    
+    return location
+
+@app.get("/api/v1/locations/by-name/{location_name}", response_model=LocationResponse)
+async def get_location_by_name(location_name: str, db: Session = Depends(get_db)):
+    """Get a specific location by its name (case-insensitive)"""
+    location = db.query(models.CampusLocation).filter(
+        models.CampusLocation.location_name.ilike(location_name),
+        models.CampusLocation.is_active == True
+    ).first()
+    
+    if not location:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Location with name '{location_name}' not found or inactive"
+        )
+    
+    return location
+
 @app.post("/api/v1/locations", response_model=LocationResponse)
 async def create_location(location: LocationCreate, db: Session = Depends(get_db)):
     """Create new campus location"""
-    db_location = models.CampusLocation(**location.dict())
+    # Check if location name already exists
+    existing = db.query(models.CampusLocation).filter(
+        models.CampusLocation.location_name.ilike(location.location_name)
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Location with name '{location.location_name}' already exists"
+        )
+    
+    db_location = models.CampusLocation(**location.model_dump())
     db.add(db_location)
     db.commit()
     db.refresh(db_location)
