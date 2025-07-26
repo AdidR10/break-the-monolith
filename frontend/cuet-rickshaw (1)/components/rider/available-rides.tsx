@@ -70,7 +70,7 @@ export default function AvailableRides() {
           await refreshRides()
 
           // Show success message
-          console.log(`Ride accepted! Fare: ৳${estimatedFare?.toFixed(2) || "TBD"}`)
+          console.log(`Ride accepted! Fare: ৳${estimatedFare ? Number(estimatedFare).toFixed(2) : "TBD"}`)
         } else {
           setError(acceptResponse.error || "Failed to accept ride offer")
         }
@@ -221,7 +221,7 @@ export default function AvailableRides() {
 
                 {ride.estimated_distance && (
                   <div className="text-sm text-gray-600">
-                    <span className="font-medium">Distance:</span> {ride.estimated_distance.toFixed(1)} km
+                    <span className="font-medium">Distance:</span> {Number(ride.estimated_distance).toFixed(1)} km
                     {ride.estimated_duration && (
                       <span className="ml-3">
                         <span className="font-medium">Duration:</span> ~{ride.estimated_duration} min
@@ -233,7 +233,7 @@ export default function AvailableRides() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <DollarSign className="h-4 w-4 text-green-600" />
-                    <span className="font-semibold text-green-600">৳{ride.estimated_fare?.toFixed(2) || "TBD"}</span>
+                    <span className="font-semibold text-green-600">৳{ride.estimated_fare ? Number(ride.estimated_fare).toFixed(2) : "TBD"}</span>
                   </div>
                   <Button
                     onClick={() => handleAcceptRide(ride.id, ride.estimated_fare)}

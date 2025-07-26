@@ -81,7 +81,7 @@ export default function WalletComponent() {
       <CardContent>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-3xl font-bold text-green-600">৳{wallet ? wallet.balance.toFixed(2) : "0.00"}</p>
+            <p className="text-3xl font-bold text-green-600">৳{wallet ? Number(wallet.balance).toFixed(2) : "0.00"}</p>
             <p className="text-sm text-gray-500">Available Balance</p>
             {wallet && !wallet.is_active && <p className="text-sm text-red-500 mt-1">Wallet is inactive</p>}
           </div>

@@ -63,13 +63,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [locations, setLocations] = useState<Location[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
 
   const clearError = useCallback(() => {
     setError(null)
   }, [])
 
-  // Initialize auth state
+  // Check if we're on the client side
   useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  const refreshWallet = useCallback(async (): Promise<void> => {
+    try {
+      const response = await PaymentService.getWallet()
+      if (response.success && response.data) {
+        setWallet(response.data)
+      } else if (response.error && !response.error.includes("not found")) {
+        console.error("Error refreshing wallet:", response.error)
+      }
+    } catch (error) {
+      console.error("Error refreshing wallet:", error)
+    }
+  }, [])
+
+  const refreshRides = useCallback(async (): Promise<void> => {
+    try {
+      const response = await RideService.getMyRides()
+      if (response.success && response.data && Array.isArray(response.data)) {
+        setRides(response.data)
+      } else if (response.error) {
+        console.error("Error refreshing rides:", response.error)
+      }
+    } catch (error) {
+      console.error("Error refreshing rides:", error)
+    }
+  }, [])
+
+  const refreshLocations = useCallback(async (): Promise<void> => {
+    try {
+      const response = await LocationService.getLocations()
+      if (response.success && response.data && Array.isArray(response.data)) {
+        setLocations(response.data)
+      } else if (response.error) {
+        console.error("Error refreshing locations:", response.error)
+      }
+    } catch (error) {
+      console.error("Error refreshing locations:", error)
+    }
+  }, [])
+
+  // Initialize auth state only on client side
+  useEffect(() => {
+    if (!isClient) return
+
     const initializeAuth = async () => {
       try {
         const userData = AuthService.getCurrentUser()
@@ -90,7 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     initializeAuth()
-  }, [])
+  }, [isClient, refreshWallet, refreshRides, refreshLocations])
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true)
@@ -172,19 +219,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const refreshWallet = async (): Promise<void> => {
-    try {
-      const response = await PaymentService.getWallet()
-      if (response.success && response.data) {
-        setWallet(response.data)
-      } else if (response.error && !response.error.includes("not found")) {
-        console.error("Error refreshing wallet:", response.error)
-      }
-    } catch (error) {
-      console.error("Error refreshing wallet:", error)
-    }
-  }
-
   const topUpWallet = async (amount: number): Promise<{ success: boolean; error?: string }> => {
     if (amount <= 0) {
       return { success: false, error: "Amount must be greater than 0" }
@@ -206,19 +240,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { success: false, error: error.message || "Top-up failed" }
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const refreshRides = async (): Promise<void> => {
-    try {
-      const response = await RideService.getMyRides()
-      if (response.success && response.data) {
-        setRides(response.data)
-      } else if (response.error) {
-        console.error("Error refreshing rides:", response.error)
-      }
-    } catch (error) {
-      console.error("Error refreshing rides:", error)
     }
   }
 
@@ -281,22 +302,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const refreshLocations = async (): Promise<void> => {
-    try {
-      const response = await LocationService.getLocations()
-      if (response.success && response.data) {
-        setLocations(response.data)
-      } else if (response.error) {
-        console.error("Error refreshing locations:", response.error)
-      }
-    } catch (error) {
-      console.error("Error refreshing locations:", error)
-    }
-  }
-
-  // Get active ride
-  const activeRide =
-    rides.find((ride) => ["REQUESTED", "ACCEPTED", "DRIVER_ARRIVED", "STARTED"].includes(ride.status)) || null
+  // Get active ride - with defensive programming
+  const activeRide = Array.isArray(rides) 
+    ? rides.find((ride) => ["REQUESTED", "ACCEPTED", "DRIVER_ARRIVED", "STARTED"].includes(ride.status)) || null
+    : null
 
   const contextValue: AppContextType = {
     user,

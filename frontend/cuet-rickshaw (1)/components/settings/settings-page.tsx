@@ -177,7 +177,7 @@ export default function SettingsPage({ onNavigateBack, onLogout }: SettingsPageP
                   </div>
                   <div>
                     <p className="font-medium">Wallet Balance</p>
-                    <p className="text-sm text-gray-500">৳{wallet ? wallet.balance.toFixed(2) : "0.00"} BDT</p>
+                    <p className="text-sm text-gray-500">৳{wallet ? Number(wallet.balance).toFixed(2) : "0.00"} BDT</p>
                   </div>
                 </div>
                 <Badge variant="secondary">Active</Badge>

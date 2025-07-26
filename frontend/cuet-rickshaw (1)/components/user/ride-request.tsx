@@ -167,13 +167,13 @@ export default function RideRequest() {
             <div className="space-y-4">
               <div className="text-center">
                 <p className="text-sm text-gray-600 mb-2">Estimated Fare</p>
-                <p className="text-3xl font-bold text-green-600">৳{fare.total_fare.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-green-600">৳{Number(fare.total_fare).toFixed(2)}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">Distance</p>
-                  <p className="font-semibold">{fare.distance_km.toFixed(1)} km</p>
+                  <p className="font-semibold">{Number(fare.distance_km).toFixed(1)} km</p>
                 </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <p className="text-gray-600">Duration</p>
@@ -184,11 +184,11 @@ export default function RideRequest() {
               <div className="text-xs text-gray-500 space-y-1">
                 <div className="flex justify-between">
                   <span>Base fare:</span>
-                  <span>৳{fare.base_fare.toFixed(2)}</span>
+                  <span>৳{Number(fare.base_fare).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Distance charge:</span>
-                  <span>৳{(fare.total_fare - fare.base_fare).toFixed(2)}</span>
+                  <span>৳{(Number(fare.total_fare) - Number(fare.base_fare)).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -196,7 +196,7 @@ export default function RideRequest() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Insufficient balance. You need ৳{(fare.total_fare - wallet.balance).toFixed(2)} more.
+                    Insufficient balance. You need ৳{(Number(fare.total_fare) - Number(wallet.balance)).toFixed(2)} more.
                   </AlertDescription>
                 </Alert>
               )}

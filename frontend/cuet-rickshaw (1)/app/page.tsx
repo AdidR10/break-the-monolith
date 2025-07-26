@@ -22,15 +22,21 @@ export default function App() {
 function MainApp() {
   const { isAuthenticated, user, profile, isLoading } = useAppContext()
   const [currentPage, setCurrentPage] = useState<"auth" | "user" | "rider" | "settings">("auth")
+  const [isClient, setIsClient] = useState(false)
+
+  // Ensure we're on the client side before making state decisions
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isClient && isAuthenticated && user) {
       const userType = user.user_type === "STUDENT" ? "user" : "rider"
       setCurrentPage(userType)
-    } else {
+    } else if (isClient && !isAuthenticated) {
       setCurrentPage("auth")
     }
-  }, [isAuthenticated, user])
+  }, [isClient, isAuthenticated, user])
 
   const handleLogin = (type: "user" | "rider") => {
     setCurrentPage(type)
@@ -51,8 +57,8 @@ function MainApp() {
     }
   }
 
-  // Show loading screen during initial authentication check
-  if (isLoading && currentPage === "auth") {
+  // Show loading screen during initial authentication check AND hydration
+  if (isLoading || !isClient) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 flex items-center justify-center">
         <div className="text-center">

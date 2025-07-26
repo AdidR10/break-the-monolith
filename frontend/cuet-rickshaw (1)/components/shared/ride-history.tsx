@@ -149,7 +149,7 @@ export default function RideHistory() {
 
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-green-600">
-                    ৳{(ride.fare_amount || ride.estimated_fare || 0).toFixed(2)}
+                    ৳{Number(ride.fare_amount || ride.estimated_fare || 0).toFixed(2)}
                   </span>
                   <div className="flex items-center gap-4 text-sm text-gray-500">
                     {ride.distance_km && <span>{ride.distance_km} km</span>}
